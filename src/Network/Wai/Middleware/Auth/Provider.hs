@@ -15,6 +15,7 @@ module Network.Wai.Middleware.Auth.Provider
   , ProviderParser
   , mkProviderParser
   , parseProviders
+  , parseProviders'
   -- * User
   , AuthUser(..)
   , UserIdentity
@@ -26,7 +27,7 @@ module Network.Wai.Middleware.Auth.Provider
 import           Blaze.ByteString.Builder      (toByteString)
 import           Control.Arrow                 (second)
 import           Data.Aeson                    (FromJSON (..), Object,
-                                                Result (..), Value)
+                                                Value, eitherDecodeStrict')
 import           Data.Aeson.Types              (parseEither)
 
 import           Data.Aeson.TH                 (defaultOptions, deriveJSON,
@@ -41,7 +42,9 @@ import           Data.Maybe                    (fromMaybe)
 import           Data.Monoid                   ((<>))
 import           Data.Proxy                    (Proxy)
 import qualified Data.Text                     as T
-import           Data.Text.Encoding            (decodeUtf8With)
+import           Data.Text                     (Text)
+import           Data.Text.Encoding            (decodeUtf8With,
+                                                encodeUtf8)
 import           Data.Text.Encoding.Error      (lenientDecode)
 import           GHC.Generics                  (Generic)
 import           Network.HTTP.Types            (Status, renderQueryText)
@@ -160,18 +163,23 @@ mkProviderParser _ =
     nameProxyError :: ap
     nameProxyError = error "AuthProvider.getProviderName should not evaluate it's argument."
 
+eitherText :: Either String a -> Either Text a
+eitherText = either (Left . T.pack) Right
+
 -- | Parse configuration for providers from an `Object`.
-parseProviders :: Object -> [ProviderParser] -> Result Providers
-parseProviders unparsedProvidersHM providerParsers =
+parseProviders' :: Object -> [ProviderParser] -> Either Text Providers
+parseProviders' unparsedProvidersHM providerParsers =
   if HM.null unrecognized
-    then sequence $ HM.intersectionWith parseProvider unparsedProvidersHM parsersHM
-    else Error $
-         "Provider name(s) are not recognized: " ++
-         T.unpack (T.intercalate ", " $ HM.keys unrecognized)
+    then eitherText $ sequence $ HM.intersectionWith parseEither parsersHM unparsedProvidersHM
+    else Left $
+         "Provider name(s) are not recognized: " <>
+           (T.intercalate ", " $ HM.keys unrecognized)
   where
     parsersHM = HM.fromList providerParsers
     unrecognized = HM.difference unparsedProvidersHM parsersHM
-    parseProvider v p = either Error Success $ parseEither p v
+
+parseProviders :: Text -> [ProviderParser] -> Either Text Providers
+parseProviders s p = flip parseProviders' p =<< eitherText (eitherDecodeStrict' (encodeUtf8 s))
 
 -- | Create a url renderer for a provider.
 mkRouteRender :: Maybe T.Text -> T.Text -> [T.Text] -> Render Provider

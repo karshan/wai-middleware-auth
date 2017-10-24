@@ -286,8 +286,8 @@ userKey = unsafePerformIO Vault.newKey
 -- @Just@ value.
 --
 -- @since 0.1.0
-getAuthUser :: Request -> Maybe AuthUser
-getAuthUser = Vault.lookup userKey . vault
+getAuthUser :: Vault.Vault -> Maybe AuthUser
+getAuthUser = Vault.lookup userKey
 
 
 -- | Current version

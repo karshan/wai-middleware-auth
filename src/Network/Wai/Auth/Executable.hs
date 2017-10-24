@@ -11,6 +11,7 @@ module Network.Wai.Auth.Executable
 import           Data.Aeson                           (Result (..))
 import           Data.String                          (fromString)
 import           Data.Text.Encoding                   (encodeUtf8)
+import qualified Data.Text as T
 import           Data.Yaml.Config                     (loadYamlSettings, useEnv)
 import           Network.HTTP.Client.TLS              (getGlobalManager)
 import           Network.HTTP.ReverseProxy            (ProxyDest (..),
@@ -71,9 +72,9 @@ mkMain
   -> IO ()
 mkMain AuthConfig {..} providerParsers run = do
   let !providers =
-        case parseProviders configProviders providerParsers of
-          Error errMsg       -> error errMsg
-          Success providers' -> providers'
+        case parseProviders' configProviders providerParsers of
+          Left errMsg      -> error (T.unpack errMsg)
+          Right providers' -> providers'
   let authSettings =
         (case configSecretKey of
            SecretKey key         -> setAuthKey $ return key
